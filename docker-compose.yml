@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  api:
+    container_name: parliament-voting-api
+    build:
+      context: .
+      dockerfile: Dockerfile
+      platforms:
+        - 'linux/amd64'
+        - 'linux/arm64' # For M1/M2 Macs
+      args:
+        - NODE_ENV=development
+    ports:
+      - '3000:3000'
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
+    environment:
+      - NODE_ENV=development
+      - DATABASE_HOST=db
+      - DATABASE_PORT=5432
+      - DATABASE_USER=postgres
+      - DATABASE_PASSWORD=password
+      - DATABASE_NAME=parliament_voting
+    depends_on:
+      - db
+    networks:
+      - parliament-network
+    restart: unless-stopped
+    command: npm run start:dev
+
+  db:
+    container_name: parliament-voting-db
+    image: postgres:14-alpine
+    platform: ${DOCKER_PLATFORM:-linux/amd64} # Dynamic platform selection
+    ports:
+      - '5432:5432'
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=parliament_voting
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - parliament-network
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    container_name: parliament-voting-pgadmin
+    image: dpage/pgadmin4:latest
+    platform: ${DOCKER_PLATFORM:-linux/amd64} # Dynamic platform selection
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@admin.com
+      - PGADMIN_DEFAULT_PASSWORD=admin
+      - PGADMIN_CONFIG_SERVER_MODE=False
+    ports:
+      - '5050:80'
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - db
+    networks:
+      - parliament-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    name: parliament-voting-postgres-data
+  pgadmin_data:
+    name: parliament-voting-pgadmin-data
+
+networks:
+  parliament-network:
+    name: parliament-network
+    driver: bridge
