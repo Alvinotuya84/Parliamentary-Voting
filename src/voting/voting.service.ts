@@ -22,7 +22,9 @@ export class VotingService {
   ) {}
 
   async processVote(voiceData: string, motionId: string, memberId: string) {
-    const voteIntent = await this.processVoiceVote(voiceData);
+    const { voteIntent } = await this.voiceProcessorService.processVoice(
+      Buffer.from(voiceData, 'base64'),
+    );
 
     const vote = await this.createVote({
       member: await this.memberRepository.findOne({ where: { id: memberId } }),
