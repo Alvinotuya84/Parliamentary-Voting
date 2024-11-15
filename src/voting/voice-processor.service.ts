@@ -4,6 +4,7 @@ import { SpeechClient, protos } from '@google-cloud/speech';
 import * as natural from 'natural';
 import OpenAI from 'openai';
 import * as path from 'path';
+import * as tf from '@tensorflow/tfjs-node';
 
 interface IRecognizeResponse
   extends protos.google.cloud.speech.v1.IRecognizeResponse {}
@@ -54,10 +55,11 @@ export class VoiceProcessorService {
     };
 
     const config = {
-      encoding: 'LINEAR16' as const,
-      sampleRateHertz: 16000,
+      encoding: 'WEBM_OPUS' as const,
       languageCode: 'en-US',
-      enableAutomaticPunctuation: true,
+      model: 'default',
+
+      sampleRateHertz: 48000,
     };
 
     const request = {
@@ -66,26 +68,98 @@ export class VoiceProcessorService {
     };
 
     try {
-      const [response]: [IRecognizeResponse, IRecognizeRequest, {}] =
-        await this.speechClient.recognize(request);
+      console.log('Sending request to Google Speech API...');
+      const [response] = await this.speechClient.recognize(request);
+      console.log('Response:', JSON.stringify(response, null, 2));
 
-      if (!response.results || response.results.length === 0) {
+      if (!response.results?.length) {
         throw new Error('No speech recognition results');
       }
 
       return response.results
-        .map((result) => {
-          if (!result.alternatives || result.alternatives.length === 0) {
-            return '';
-          }
-          return result.alternatives[0].transcript || '';
-        })
-        .filter((text) => text.length > 0)
+        .map((result) => result.alternatives?.[0]?.transcript || '')
+        .filter(Boolean)
         .join('\n');
     } catch (error) {
-      console.error('Speech-to-text error:', error);
-      throw new Error('Failed to convert speech to text');
+      console.error('Speech recognition error:', error);
+      throw error;
     }
+  }
+
+  async compareVoicePrints(
+    storedPrint: string,
+    currentPrint: string,
+  ): Promise<number> {
+    const storedFeatures = await this.extractFeatures(
+      Buffer.from(storedPrint, 'base64'),
+    );
+    const currentFeatures = await this.extractFeatures(
+      Buffer.from(currentPrint, 'base64'),
+    );
+    return this.cosineSimilarity(storedFeatures, currentFeatures);
+  }
+
+  private async extractFeatures(audioBuffer: Buffer): Promise<Float32Array> {
+    const audioData = this.decodeAudioBuffer(audioBuffer);
+    const features = await this.computeSpectralFeatures(audioData);
+    return features;
+  }
+
+  private decodeAudioBuffer(buffer: Buffer): Float32Array {
+    // Convert webm audio to PCM samples
+    // This is a simplified version - you might need a proper audio decoder
+    const array = new Uint8Array(buffer);
+    return new Float32Array(array.map((x) => (x - 128) / 128));
+  }
+
+  private async computeSpectralFeatures(
+    audioData: Float32Array,
+  ): Promise<Float32Array> {
+    const tensor = tf.tensor1d(audioData);
+    const frameSize = 2048;
+    const hopSize = 512;
+    const frames = this.getFrames(audioData, frameSize, hopSize);
+
+    // Compute power spectrum for each frame
+    const spectralFeatures = [];
+    for (const frame of frames) {
+      const frameTensor = tf.tensor1d(frame);
+      const spectrum = tf.spectral.rfft(frameTensor);
+      const magnitude = tf.abs(spectrum);
+      const powers = await magnitude.data();
+      spectralFeatures.push(...Array.from(powers));
+      tf.dispose([frameTensor, spectrum, magnitude]);
+    }
+
+    tf.dispose(tensor);
+    return new Float32Array(spectralFeatures);
+  }
+
+  private getFrames(
+    signal: Float32Array,
+    frameSize: number,
+    hopSize: number,
+  ): Float32Array[] {
+    const frames: Float32Array[] = [];
+    for (let i = 0; i < signal.length - frameSize; i += hopSize) {
+      frames.push(signal.slice(i, i + frameSize));
+    }
+    return frames;
+  }
+
+  private cosineSimilarity(a: Float32Array, b: Float32Array): number {
+    const minLength = Math.min(a.length, b.length);
+    let dotProduct = 0;
+    let normA = 0;
+    let normB = 0;
+
+    for (let i = 0; i < minLength; i++) {
+      dotProduct += a[i] * b[i];
+      normA += a[i] * a[i];
+      normB += b[i] * b[i];
+    }
+
+    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
   }
 
   async processVoice(audioBuffer: Buffer): Promise<{

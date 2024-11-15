@@ -11,7 +11,7 @@ export class Member {
   @Column()
   constituency: string;
 
-  @Column()
+  @Column({ nullable: true })
   voicePrint: string;
 
   @Column()

@@ -23,7 +23,10 @@ export class MemberService {
   }
 
   async create(memberData: Partial<Member>): Promise<Member> {
-    const member = this.memberRepository.create(memberData);
+    const member = this.memberRepository.create({
+      ...memberData,
+      voicePrint: null,
+    });
     return this.memberRepository.save(member);
   }
 
@@ -40,7 +43,10 @@ export class MemberService {
   }
 
   async updateVoicePrint(id: string, voicePrint: string): Promise<Member> {
-    const member = await this.findOne(id);
+    const member = await this.memberRepository.findOne({ where: { id } });
+    if (!member) {
+      throw new Error('Member not found');
+    }
     member.voicePrint = voicePrint;
     return this.memberRepository.save(member);
   }
