@@ -7,6 +7,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { VotingService } from './voting.service';
+import { VotingEventsService } from './voting.events';
 
 @WebSocketGateway({
   cors: {
@@ -17,7 +18,13 @@ export class VotingGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
 
-  constructor(private votingService: VotingService) {}
+  constructor(private votingEvents: VotingEventsService) {}
+  onModuleInit() {
+    // Subscribe to vote updates
+    this.votingEvents.voteUpdate$.subscribe(({ motionId, voteData }) => {
+      this.server.to(`motion-${motionId}`).emit('voteUpdate', voteData);
+    });
+  }
 
   handleConnection(client: Socket) {
     console.log(`Client connected: ${client.id}`);

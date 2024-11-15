@@ -6,6 +6,7 @@ import { Motion } from '../entities/motion.entity';
 import { Member } from '../entities/member.entity';
 import { VotingGateway } from './voting.gateway';
 import { VoiceProcessorService } from './voice-processor.service';
+import { VotingEventsService } from './voting.events';
 
 @Injectable()
 export class VotingService {
@@ -16,33 +17,22 @@ export class VotingService {
     private motionRepository: Repository<Motion>,
     @InjectRepository(Member)
     private memberRepository: Repository<Member>,
-    private votingGateway: VotingGateway,
+    private votingEvents: VotingEventsService,
     private voiceProcessorService: VoiceProcessorService,
   ) {}
 
   async processVote(voiceData: string, motionId: string, memberId: string) {
-    const member = await this.memberRepository.findOne({
-      where: { id: memberId },
-    });
-    const motion = await this.motionRepository.findOne({
-      where: { id: motionId },
-    });
-
-    if (!member || !motion) {
-      throw new NotFoundException('Member or Motion not found');
-    }
-
     const voteIntent = await this.processVoiceVote(voiceData);
 
     const vote = await this.createVote({
-      member,
-      motion,
+      member: await this.memberRepository.findOne({ where: { id: memberId } }),
+      motion: await this.motionRepository.findOne({ where: { id: motionId } }),
       vote: voteIntent,
       voiceRecording: voiceData,
     });
 
     const voteStats = await this.getVoteStatistics(motionId);
-    this.votingGateway.broadcastVoteUpdate(motionId, voteStats);
+    this.votingEvents.broadcastVoteUpdate(motionId, voteStats);
 
     return vote;
   }
