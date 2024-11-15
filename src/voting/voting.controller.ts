@@ -1,9 +1,7 @@
 import { Controller, Post, Body, Get, Param, UseGuards } from '@nestjs/common';
 import { VotingService } from './voting.service';
-import { AuthGuard } from '@nestjs/passport';
 
 @Controller('voting')
-@UseGuards(AuthGuard('jwt'))
 export class VotingController {
   constructor(private votingService: VotingService) {}
 

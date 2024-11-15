@@ -13,7 +13,6 @@ import { AuthGuard } from '@nestjs/passport';
 import { Motion } from '../entities/motion.entity';
 
 @Controller('motions')
-@UseGuards(AuthGuard('jwt'))
 export class MotionController {
   constructor(private readonly motionService: MotionService) {}
 

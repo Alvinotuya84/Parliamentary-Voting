@@ -13,7 +13,6 @@ import { Member } from '../entities/member.entity';
 import { MemberService } from './member.service';
 
 @Controller('members')
-@UseGuards(AuthGuard('jwt'))
 export class MemberController {
   constructor(private readonly memberService: MemberService) {}
 
